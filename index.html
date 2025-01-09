@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Pathfinding Visualizer</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/phaser/3.60.0/phaser.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background-color: #f0f0f0;
+        }
+        #game-container {
+            position: relative;
+        }
+        .controls {
+            position: absolute;
+            bottom: -60px;
+            left: 0;
+            width: 100%;
+            display: flex;
+            justify-content: space-between;
+            padding: 10px;
+        }
+        select, button {
+            padding: 8px 16px;
+            font-size: 16px;
+            border-radius: 4px;
+            border: none;
+            background: #0066cc;
+            color: white;
+            cursor: pointer;
+        }
+        button:hover {
+            background: #0052a3;
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <div id="game"></div>
+        <div class="controls">
+            <select id="algorithm">
+                <option value="astar">A*</option>
+                <option value="dijkstra">Dijkstra</option>
+                <option value="bfs">BFS</option>
+                <option value="dfs">DFS</option>
+            </select>
+            <select id="maze">
+                <option value="clear">Clear</option>
+                <option value="random">Random</option>
+                <option value="maze1">Maze 1</option>
+                <option value="maze2">Maze 2</option>
+            </select>
+            <button id="startBtn">Start</button>
+            <button id="clearBtn">Clear</button>
+        </div>
+    </div>
+
+    <script>
+        const GRID_SIZE = 50;
+        const CELL_SIZE = 16;
+        const WIDTH = GRID_SIZE * CELL_SIZE;
+        const HEIGHT = GRID_SIZE * CELL_SIZE;
+
+        const COLORS = {
+            WHITE: 0xFFFFFF,
+            BLACK: 0x000000,
+            RED: 0xFF0000,
+            GREEN: 0x00FF00,
+            BLUE: 0x0000FF,
+            YELLOW: 0xFFFF00,
+            PURPLE: 0x800080,
+            ORANGE: 0xFFA500,
+            TURQUOISE: 0x40E0D0,
+            GREY: 0x808080
+        };
+
+        class PathfindingScene extends Phaser.Scene {
+            constructor() {
+                super({ key: 'PathfindingScene' });
+                this.grid = [];
+                this.start = null;
+                this.end = null;
+                this.isRunning = false;
+            }
+
+            create() {
+                this.createGrid();
+                this.setupInput();
+                this.setupUI();
+            }
+
+            createGrid() {
+                this.graphics = this.add.graphics();
+                
+                for (let i = 0; i < GRID_SIZE; i++) {
+                    this.grid[i] = [];
+                    for (let j = 0; j < GRID_SIZE; j++) {
+                        this.grid[i][j] = {
+                            x: i,
+                            y: j,
+                            isWall: false,
+                            isStart: false,
+                            isEnd: false,
+                            isPath: false,
+                            isVisited: false,
+                            g: 0,
+                            h: 0,
+                            f: 0,
+                            parent: null
+                        };
+                    }
+                }
+                this.drawGrid();
+            }
+
+            drawGrid() {
+                this.graphics.clear();
+
+                // Draw cells
+                for (let i = 0; i < GRID_SIZE; i++) {
+                    for (let j = 0; j < GRID_SIZE; j++) {
+                        const cell = this.grid[i][j];
+                        let color = COLORS.WHITE;
+                        
+                        if (cell.isWall) color = COLORS.BLACK;
+                        if (cell.isVisited) color = COLORS.RED;
+                        if (cell.isPath) color = COLORS.PURPLE;
+                        if (cell.isStart) color = COLORS.ORANGE;
+                        if (cell.isEnd) color = COLORS.TURQUOISE;
+
+                        this.graphics.fillStyle(color);
+                        this.graphics.fillRect(
+                            i * CELL_SIZE,
+                            j * CELL_SIZE,
+                            CELL_SIZE - 1,
+                            CELL_SIZE - 1
+                        );
+                    }
+                }
+            }
+
+            setupInput() {
+                this.input.on('pointerdown', (pointer) => {
+                    if (this.isRunning) return;
+
+                    const x = Math.floor(pointer.x / CELL_SIZE);
+                    const y = Math.floor(pointer.y / CELL_SIZE);
+
+                    if (x >= 0 && x < GRID_SIZE && y >= 0 && y < GRID_SIZE) {
+                        if (pointer.rightButtonDown()) {
+                            this.clearCell(x, y);
+                        } else {
+                            this.setCell(x, y);
+                        }
+                        this.drawGrid();
+                    }
+                });
+
+                this.input.on('pointermove', (pointer) => {
+                    if (this.isRunning || !pointer.isDown) return;
+
+                    const x = Math.floor(pointer.x / CELL_SIZE);
+                    const y = Math.floor(pointer.y / CELL_SIZE);
+
+                    if (x >= 0 && x < GRID_SIZE && y >= 0 && y < GRID_SIZE) {
+                        if (pointer.rightButtonDown()) {
+                            this.clearCell(x, y);
+                        } else if (!this.start || !this.end) {
+                            this.setCell(x, y);
+                        }
+                        this.drawGrid();
+                    }
+                });
+            }
+
+            setupUI() {
+                document.getElementById('startBtn').onclick = () => this.startPathfinding();
+                document.getElementById('clearBtn').onclick = () => this.clearGrid();
+                document.getElementById('maze').onchange = (e) => this.loadMaze(e.target.value);
+            }
+
+            setCell(x, y) {
+                const cell = this.grid[x][y];
+                if (!this.start && !cell.isEnd) {
+                    cell.isStart = true;
+                    this.start = cell;
+                } else if (!this.end && !cell.isStart) {
+                    cell.isEnd = true;
+                    this.end = cell;
+                } else if (!cell.isStart && !cell.isEnd) {
+                    cell.isWall = true;
+                }
+            }
+
+            clearCell(x, y) {
+                const cell = this.grid[x][y];
+                if (cell.isStart) this.start = null;
+                if (cell.isEnd) this.end = null;
+                cell.isStart = false;
+                cell.isEnd = false;
+                cell.isWall = false;
+                cell.isPath = false;
+                cell.isVisited = false;
+            }
+
+            clearGrid() {
+                this.start = null;
+                this.end = null;
+                this.createGrid();
+            }
+
+            async startPathfinding() {
+                if (!this.start || !this.end || this.isRunning) return;
+                
+                this.isRunning = true;
+                const algorithm = document.getElementById('algorithm').value;
+                
+                // Reset path and visited cells
+                for (let i = 0; i < GRID_SIZE; i++) {
+                    for (let j = 0; j < GRID_SIZE; j++) {
+                        const cell = this.grid[i][j];
+                        cell.isPath = false;
+                        cell.isVisited = false;
+                        cell.parent = null;
+                    }
+                }
+
+                let path;
+                switch (algorithm) {
+                    case 'astar':
+                        path = await this.astar();
+                        break;
+                    case 'dijkstra':
+                        path = await this.dijkstra();
+                        break;
+                    case 'bfs':
+                        path = await this.bfs();
+                        break;
+                    case 'dfs':
+                        path = await this.dfs();
+                        break;
+                }
+
+                if (path) {
+                    await this.visualizePath(path);
+                }
+                
+                this.isRunning = false;
+            }
+
+            async visualizePath(path) {
+                for (const cell of path) {
+                    if (!cell.isStart && !cell.isEnd) {
+                        cell.isPath = true;
+                        this.drawGrid();
+                        await new Promise(resolve => setTimeout(resolve, 50));
+                    }
+                }
+            }
+
+            getNeighbors(cell) {
+                const neighbors = [];
+                const directions = [
+                    { x: 0, y: -1 }, // up
+                    { x: 1, y: 0 },  // right
+                    { x: 0, y: 1 },  // down
+                    { x: -1, y: 0 }  // left
+                ];
+
+                for (const dir of directions) {
+                    const newX = cell.x + dir.x;
+                    const newY = cell.y + dir.y;
+
+                    if (newX >= 0 && newX < GRID_SIZE && 
+                        newY >= 0 && newY < GRID_SIZE && 
+                        !this.grid[newX][newY].isWall) {
+                        neighbors.push(this.grid[newX][newY]);
+                    }
+                }
+
+                return neighbors;
+            }
+
+            async astar() {
+                const openSet = [this.start];
+                const closedSet = new Set();
+                
+                while (openSet.length > 0) {
+                    let current = openSet[0];
+                    let currentIndex = 0;
+
+                    for (let i = 1; i < openSet.length; i++) {
+                        if (openSet[i].f < current.f) {
+                            current = openSet[i];
+                            currentIndex = i;
+                        }
+                    }
+
+                    if (current === this.end) {
+                        const path = [];
+                        let temp = current;
+                        while (temp.parent) {
+                            path.push(temp);
+                            temp = temp.parent;
+                        }
+                        return path.reverse();
+                    }
+
+                    openSet.splice(currentIndex, 1);
+                    closedSet.add(current);
+
+                    if (!current.isStart) {
+                        current.isVisited = true;
+                        this.drawGrid();
+                        await new Promise(resolve => setTimeout(resolve, 20));
+                    }
+
+                    for (const neighbor of this.getNeighbors(current)) {
+                        if (closedSet.has(neighbor)) continue;
+
+                        const tentativeG = current.g + 1;
+
+                        if (!openSet.includes(neighbor)) {
+                            openSet.push(neighbor);
+                        } else if (tentativeG >= neighbor.g) {
+                            continue;
+                        }
+
+                        neighbor.parent = current;
+                        neighbor.g = tentativeG;
+                        neighbor.h = this.heuristic(neighbor, this.end);
+                        neighbor.f = neighbor.g + neighbor.h;
+                    }
+                }
+
+                return null;
+            }
+
+            heuristic(a, b) {
+                return Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
+            }
+
+            async bfs() {
+                const queue = [this.start];
+                const visited = new Set([this.start]);
+
+                while (queue.length > 0) {
+                    const current = queue.shift();
+
+                    if (current === this.end) {
+                        const path = [];
+                        let temp = current;
+                        while (temp.parent) {
+                            path.push(temp);
+                            temp = temp.parent;
+                        }
+                        return path.reverse();
+                    }
+
+                    if (!current.isStart) {
+                        current.isVisited = true;
+                        this.drawGrid();
+                        await new Promise(resolve => setTimeout(resolve, 20));
+                    }
+
+                    for (const neighbor of this.getNeighbors(current)) {
+                        if (!visited.has(neighbor)) {
+                            visited.add(neighbor);
+                            neighbor.parent = current;
+                            queue.push(neighbor);
+                        }
+                    }
+                }
+
+                return null;
+            }
+
+            async dfs() {
+                const stack = [this.start];
+                const visited = new Set([this.start]);
+
+                while (stack.length > 0) {
+                    const current = stack.pop();
+
+                    if (current === this.end) {
+                        const path = [];
+                        let temp = current;
+                        while (temp.parent) {
+                            path.push(temp);
+                            temp = temp.parent;
+                        }
+                        return path.reverse();
+                    }
+
+                    if (!current.isStart) {
+                        current.isVisited = true;
+                        this.drawGrid();
+                        await new Promise(resolve => setTimeout(resolve, 20));
+                    }
+
+                    for (const neighbor of this.getNeighbors(current)) {
+                        if (!visited.has(neighbor)) {
+                            visited.add(neighbor);
+                            neighbor.parent = current;
+                            stack.push(neighbor);
+                        }
+                    }
+                }
+
+                return null;
+            }
+
+            async dijkstra() {
+                const unvisited = new Set();
+                const distances = new Map();
+                
+                // Initialize distances
+                for (let i = 0; i < GRID_SIZE; i++) {
+                    for (let j = 0; j < GRID_SIZE; j++) {
+                        const cell = this.grid[i][j];
+                        distances.set(cell, Infinity);
+                        unvisited.add(cell);
+                    }
+                }
+                distances.set(this.start, 0);
+
+                while (unvisited.size > 0) {
+                    // Find closest unvisited node
+                    let current = null;
+                    let minDistance = Infinity;
+                    for (const cell of unvisited) {
+                        if (distances.get(cell) < minDistance) {
+                            minDistance = distances.get(cell);
+                            current = cell;
+                        }
+                    }
+
+                    if (!current || distances.get(current) === Infinity) break;
+                    if (current === this.end) {
+                        const path = [];
+                        let temp = current;
+                        while (temp.parent) {
+                            path.push(temp);
+                            temp = temp.parent;
+                        }
+                        return path.reverse();
+                    }
+
+                    unvisited.delete(current);
+
+                    if (!current.isStart) {
+                        current.isVisited = true;
+                        this.drawGrid();
+                        await new Promise(resolve => setTimeout(resolve, 20));
+                    }
+
+                    for (const neighbor of this.getNeighbors(current)) {
+                        if (!unvisited.has(neighbor)) continue;
+                        
+                        const alt = distances.get(current) + 1;
+                        if (alt < distances.get(neighbor)) {
+                            distances.set(neighbor, alt);
+                            neighbor.parent = current;
+                        }
+                    }
+                }
+
+                return null;
+            }
+
+            loadMaze(mazeType) {
+                this.clearGrid();
+                
+                if (mazeType === 'random') {
+                    this.generateRandomMaze();
+                } else if (mazeType === 'maze1') {
+                    this.loadPresetMaze1();
+                } else if (mazeType === 'maze2') {
+                    this.loadPresetMaze2();
+                }
+                
+                this.drawGrid();
+            }
+
+            generateRandomMaze() {
+                // Simple random maze generation
+                for (let i = 0; i < GRID_SIZE; i++) {
+                    for (let j = 0; j < GRID_SIZE; j++) {
+                        if (Math.random() < 0.3) { // 30% chance of being a wall
+                            this.grid[i][j].isWall = true;
+                        }
+                    }
+                }
+                
+                // Ensure start and end areas are clear
+                for (let i = 0; i < 3; i++) {
+                    for (let j = 0; j < 3; j++) {
+                        this.grid[i][j].isWall = false;
+                        this.grid[GRID_SIZE-1-i][GRID_SIZE-1-j].isWall = false;
+                    }
+                }
+            }
+
+            loadPresetMaze1() {
+                const maze1Pattern = [
+                    // Add your maze1 pattern coordinates here
+                    {x: 5, y: 5}, {x: 6, y: 5}, {x: 7, y: 5},
+                    {x: 10, y: 10}, {x: 11, y: 10}, {x: 12, y: 10},
+                    // Add more coordinates as needed
+                ];
+
+                for (const pos of maze1Pattern) {
+                    if (pos.x < GRID_SIZE && pos.y < GRID_SIZE) {
+                        this.grid[pos.x][pos.y].isWall = true;
+                    }
+                }
+            }
+
+            loadPresetMaze2() {
+                const maze2Pattern = [
+                    // Add your maze2 pattern coordinates here
+                    {x: 15, y: 15}, {x: 16, y: 15}, {x: 17, y: 15},
+                    {x: 20, y: 20}, {x: 21, y: 20}, {x: 22, y: 20},
+                    // Add more coordinates as needed
+                ];
+
+                for (const pos of maze2Pattern) {
+                    if (pos.x < GRID_SIZE && pos.y < GRID_SIZE) {
+                        this.grid[pos.x][pos.y].isWall = true;
+                    }
+                }
+            }
+        }
+
+        // Create and start the game
+        const config = {
+            type: Phaser.AUTO,
+            width: WIDTH,
+            height: HEIGHT,
+            parent: 'game',
+            scene: PathfindingScene,
+            backgroundColor: '#ffffff'
+        };
+
+        const game = new Phaser.Game(config);
+    </script>
+</body>
+</html>
