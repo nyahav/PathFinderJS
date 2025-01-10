@@ -2,10 +2,7 @@
 
 ![Pathfinding Visualizer Screenshot](./image.png)
 
-<div align="center">
-  <img src="./image.png" width="600" alt="Pathfinding Visualization"/>
-  <p><em>Pathfinding algorithm in action</em></p>
-</div>
+
 
 ## 🌟 Overview
 An interactive pathfinding visualization tool built with Phaser.js that demonstrates various pathfinding algorithms in action. Watch in real-time as different algorithms find their way through mazes!
