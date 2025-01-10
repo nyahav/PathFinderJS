@@ -20,8 +20,8 @@
 
         .controls {
             position: absolute;
-            bottom: -60px;
-            left: 0;
+            bottom: -70px;
+            left: -10px;
             width: 100%;
             display: flex;
             justify-content: space-between;
@@ -126,8 +126,11 @@
     <script>
         const GRID_SIZE = 50;
         const CELL_SIZE = 16;
-        const WIDTH = GRID_SIZE * CELL_SIZE;
-        const HEIGHT = GRID_SIZE * CELL_SIZE;
+        const BASE_GRID_SIZE = 100; // Maximum grid size (100x100)
+        const BASE_CELL_SIZE = 8;   // Cell size for 100x100 grid
+        const WIDTH = BASE_GRID_SIZE * BASE_CELL_SIZE;  // Total width stays constant
+        const HEIGHT = BASE_GRID_SIZE * BASE_CELL_SIZE; // Total height stays constant
+
 
         const COLORS = {
             WHITE: 0xFFFFFF,
@@ -150,9 +153,9 @@
         };
 
         const CELL_SIZES = {
-            small: 24,    // Larger cells for small grid
-            medium: 16,   // Current size
-            large: 8      // Smaller cells for large grid
+            small: WIDTH / GRID_SIZES.small,    // Larger cells for 25x25
+            medium: WIDTH / GRID_SIZES.medium,  // Medium cells for 50x50
+            large: WIDTH / GRID_SIZES.large     // Smaller cells for 100x100
         };
         // Define maze presets from Python code
         const MAZE_PRESETS = {
@@ -252,6 +255,7 @@
                 this.start = null;
                 this.end = null;
                 this.isRunning = false;
+                this.isStopped = false;
             }
 
             create() {
@@ -288,14 +292,7 @@
 
             drawGrid() {
                 this.graphics.clear();
-
-                // Draw outer black border
-                const borderWidth = 3; // Line thickness
-                this.graphics.lineStyle(borderWidth, COLORS.BLACK);
-
-                // Draw outer black border
-                this.graphics.strokeRect(WIDTH, 0, WIDTH + borderWidth, HEIGHT + borderWidth);
-
+                const currentCellSize = WIDTH / GRID_SIZE;
 
                 // Draw grid lines
                 this.graphics.lineStyle(1, COLORS.GREY);
@@ -323,7 +320,7 @@
                         if (cell.isVisited && !cell.isPath) {
                             color = COLORS.TURQUOISE;
                         }
-                        if (cell.isPath) color = COLORS.PATH; // Use the new PATH color
+                        if (cell.isPath) color = COLORS.PATH; 
                         if (cell.isStart) color = COLORS.GREEN;
                         if (cell.isEnd) color = COLORS.RED;
 
@@ -336,12 +333,23 @@
                         );
                     }
                 }
+                const borderWidth = 4;
+                this.graphics.lineStyle(borderWidth, COLORS.BLACK);
+                this.graphics.strokeRect(0, 0, WIDTH, HEIGHT);
+
             }
 
             setupInput() {
                 // Initial setup of start and end cells
                 this.start = null;
                 this.end = null;
+                this.isDrawing = false;
+
+                document.getElementById('startBtn').onclick = () => this.startPathfinding();
+                document.getElementById('stopBtn').onclick = () => {
+                    this.isStopped = true;
+                    this.isRunning = false;
+                };
 
                 this.input.on('pointerdown', (pointer) => {
                     if (this.isRunning) return;
@@ -351,7 +359,7 @@
 
                     if (x >= 0 && x < GRID_SIZE && y >= 0 && y < GRID_SIZE) {
                         if (pointer.leftButtonDown()) {
-                            
+                            this.isDrawing = true;
                             if (!this.start) {
                                 console.log(pointer.x, pointer.y,"hello2");
                                 this.start = this.grid[x][y];
@@ -374,6 +382,24 @@
                         }
                     }
                     this.drawGrid();
+                });
+
+                this.input.on('pointermove', (pointer) => {
+                if (!this.isDrawing || this.isRunning) return;
+                
+                const x = Math.floor(pointer.x / CELL_SIZE);
+                const y = Math.floor(pointer.y / CELL_SIZE);
+
+                if (x >= 0 && x < GRID_SIZE && y >= 0 && y < GRID_SIZE) {
+                    if (this.grid[x][y] !== this.start && this.grid[x][y] !== this.end) {
+                        this.grid[x][y].isWall = true;
+                        this.drawGrid();
+                    }
+                }
+            });
+
+                this.input.on('pointerup', () => {
+                    this.isDrawing = false;
                 });
             }
 
@@ -463,6 +489,7 @@
                 if (!this.start || !this.end || this.isRunning) return;
 
                 this.isRunning = true;
+                this.isStopped = false;
                 const algorithm = document.getElementById('algorithm').value;
 
                 // Reset path and visited cells
@@ -490,7 +517,10 @@
                         path = await this.dfs();
                         break;
                 }
-
+                if (this.isStopped) {
+                    this.isRunning = false;
+                      return;
+                 }
                 if (path) {
                     await this.visualizePath(path);
                 }
@@ -502,7 +532,7 @@
                 for (const cell of path) {
                     if (!cell.isStart && !cell.isEnd) {
                         cell.isPath = true;
-                        cell.isVisited = false; // Ensure it's not marked as visited
+                        cell.isVisited = false; 
                         this.drawGrid();
                         await new Promise(resolve => setTimeout(resolve, 50));
                     }
@@ -510,12 +540,13 @@
                 // Set the path cells to blue
                 for (const cell of path) {
                     if (!cell.isStart && !cell.isEnd) {
-                        cell.isPath = false;
+                        //cell.isPath = false;
                         cell.isVisited = false;
-                        cell.justVisited = true; // Use justVisited to indicate the path
+                        cell.justVisited = true; 
                         this.drawGrid();
                     }
                 }
+                await new Promise(resolve => setTimeout(resolve, 500));
             }
 
             getNeighbors(cell) {
@@ -546,6 +577,9 @@
                 const closedSet = new Set();
 
                 while (openSet.length > 0) {
+                    if (this.isStopped) {
+                        return null;
+                    }
                     let current = openSet[0];
                     let currentIndex = 0;
 
@@ -607,10 +641,13 @@
             }
 
             async bfs() {
+                if (this.isStopped) {
+                    return null;
+                }
                 const queue = [this.start];
                 const visited = new Set([this.start]);
 
-                while (queue.length > 0) {
+                while (queue.length > 0 && !this.isStopped) {
                     const current = queue.shift();
 
                     if (current === this.end) {
@@ -642,10 +679,13 @@
             }
 
             async dfs() {
+                if (this.isStopped) {
+                    return null;
+                }
                 const stack = [this.start];
                 const visited = new Set([this.start]);
 
-                while (stack.length > 0) {
+                while (stack.length > 0 && !this.isStopped) {
                     const current = stack.pop();
 
                     if (current === this.end) {
@@ -677,6 +717,9 @@
             }
 
             async dijkstra() {
+                if (this.isStopped) {
+                    return null;
+                }
                 const unvisited = new Set();
                 const distances = new Map();
 
@@ -690,7 +733,7 @@
                 }
                 distances.set(this.start, 0);
 
-                while (unvisited.size > 0) {
+                while (unvisited.size > 0 && !this.isStopped) {
                     // Find closest unvisited node
                     let current = null;
                     let minDistance = Infinity;
