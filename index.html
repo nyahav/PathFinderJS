@@ -256,7 +256,41 @@
                 this.end = null;
                 this.isRunning = false;
                 this.isStopped = false;
+                this.popup = null;
             }
+            
+            showPopup(message) {
+                // Remove existing popup if any
+                if (this.popup) this.popup.destroy();
+
+                // Create new popup text
+                this.popup = this.add.text(WIDTH/2, HEIGHT/2, message, {
+                    font: '32px Arial',
+                    fill: '#00ff00',
+                    backgroundColor: '#000000',
+                    padding: { x: 20, y: 10 },
+                    align: 'center'
+                });
+                
+                // Center the text
+                this.popup.setOrigin(0.5);
+                
+                // Add fade in/out animation
+                this.popup.setAlpha(0);
+                this.tweens.add({
+                    targets: this.popup,
+                    alpha: 1,
+                    duration: 500,
+                    ease: 'Power2',
+                    yoyo: true,
+                    hold: 1000,
+                    onComplete: () => {
+                        this.popup.destroy();
+                        this.popup = null;
+                    }
+                });
+            }
+
 
             create() {
                 
@@ -523,6 +557,7 @@
                  }
                 if (path) {
                     await this.visualizePath(path);
+                    this.showPopup('Path Found! 🎉');
                 }
 
                 this.isRunning = false;
