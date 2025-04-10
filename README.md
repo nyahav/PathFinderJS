@@ -2,16 +2,13 @@
 
 ![Pathfinding Visualizer Screenshot](./image.png)
 
-Live Demo
-https://pathfinder-3iper0cxx-nyahavs-projects.vercel.app/
-
-https://pathfinder.yahavnir.com/
-
 ## 🌟 Overview
 An interactive pathfinding visualization tool built with Phaser.js that demonstrates various pathfinding algorithms in action. Watch in real-time as different algorithms find their way through mazes!
 
 ## CHECK-OUT live Demo
 https://pathfinder-3iper0cxx-nyahavs-projects.vercel.app/
+
+https://pathfinder.yahavnir.com/
 
 ## ⚡ Features
 - 🎮 Interactive grid system
